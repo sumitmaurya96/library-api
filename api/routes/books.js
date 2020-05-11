@@ -3,8 +3,10 @@ const router = express.Router();
 const mongoose = require("mongoose");
 const multer = require("multer");
 const checkAuth = require("../middleware/check.auth");
+const authenticated = require("../middleware/authenticated");
 const bookController = require("../controllers/books");
 
+//Storage stretgy
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "./uploads");
@@ -35,17 +37,32 @@ const upload = multer({
   fileFilter: fileFilter,
 });
 
-//models
-const Book = require("../models/books");
+/**
+ * Get books by any query
+ * limits to 20 books per query for a perticular page
+ * not authenticated users can't get ebooks link
+ */
+router.get("/", authenticated, bookController.get_all);
 
-router.get("/", bookController.get_all);
-
+/**
+ * Only Librarian and admin can access
+ */
 router.post("/", checkAuth, upload.single("bookImage"), bookController.post);
 
-router.get("/:bookId", bookController.get_by_id);
+/**
+ * Get books by Id
+ * not authenticated users can't get ebooks link
+ */
+router.get("/:bookId", authenticated, bookController.get_by_id);
 
+/**
+ * Only Librarian and admin can access
+ */
 router.patch("/:bookId", checkAuth, bookController.patch);
 
+/**
+ * Only Librarian and admin can access
+ */
 router.delete("/:bookId", checkAuth, bookController.delete);
 
 module.exports = router;
