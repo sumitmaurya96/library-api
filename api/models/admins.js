@@ -13,9 +13,9 @@ const adminSchema = mongoose.Schema(
       type: String,
       required: true,
     },
-    roles: {
-      type: Array,
-      default: ["admin"],
+    role: {
+      type: String,
+      default: "admin",
     },
     isSuperUser: {
       type: Boolean,

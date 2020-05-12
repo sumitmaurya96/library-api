@@ -1,11 +1,16 @@
 const mongoose = require("mongoose");
 
+/**
+ * If user is not student then cardNumber is email
+ */
+
 const userSchema = mongoose.Schema(
   {
     _id: mongoose.Schema.Types.ObjectId,
     cardNumber: {
       type: String,
-      default: null,
+      required: true,
+      unique: true,
     },
     email: {
       type: String,
@@ -17,9 +22,9 @@ const userSchema = mongoose.Schema(
       type: String,
       required: true,
     },
-    roles: {
-      type: Array,
-      default: ["student"],
+    role: {
+      type: String,
+      default: "student",
     },
   },
   { collection: "users" }

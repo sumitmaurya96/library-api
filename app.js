@@ -8,7 +8,8 @@ require("dotenv").config();
 //Routes
 const bookRoutes = require("./api/routes/books");
 const orderRoutes = require("./api/routes/orders");
-const userRoutes = require("./api/routes/users");
+const userRoutes = require("./api/routes/person/users");
+const adminRoutes = require("./api/routes/person/admins");
 
 //Connect Database
 mongoose
@@ -97,6 +98,7 @@ app.use((req, res, next) => {
 app.use("/books", bookRoutes);
 app.use("/orders", orderRoutes);
 app.use("/user", userRoutes);
+app.use("/admin", adminRoutes);
 
 //Error handling
 //If no routes matches

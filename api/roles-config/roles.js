@@ -78,4 +78,4 @@ const student = {
   ],
 };
 
-export { admin, librarian, faculty, student };
+module.exports = { admin, librarian, faculty, student };
