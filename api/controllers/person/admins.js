@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 const queryString = require("query-string");
 
 //Roles
@@ -11,6 +12,7 @@ const { admin } = require("../../roles-config/roles");
 const {
   findOneAdmin,
   findAdminsByQuery,
+  addOneAdmin,
   updateOneAdmin,
   deleteOneAdmin,
 } = require("../../helpers/admins");
@@ -34,14 +36,16 @@ exports.loginAdmin = (req, res, next) => {
               message: "email or password incorrect",
             });
           } else if (decryptedRes) {
-            const key = process.env.TOKEN_ENCRYPTION_KEY;
             const load = {
+              firstname: result.firstname,
+              lastname: result.lastname,
+              username: result.username,
               role: result.role,
               email: result.email,
               id: result._id,
             };
 
-            const token = jwt.sign(load, key, {
+            const token = jwt.sign(load, process.env.TOKEN_ENCRYPTION_KEY, {
               expiresIn: "1h",
             });
 
@@ -86,7 +90,7 @@ const superUserHelper = (req, res, flag) => {
         res.status(500).json({ error: err });
       };
 
-      const getResultCb = () => {
+      const getResultCb = (result) => {
         if (result.nModified) {
           res.status(200).json({
             message: "Successful",
@@ -145,49 +149,45 @@ exports.addAdmin = (req, res, next) => {
       res.status(500).json({ error: err });
     };
 
-    const getResultCb = (result) => {
-      if (result) {
-        res.status(409).json({ message: "Already Exsist" });
-      } else {
-        if (res.userData.isSuperUser) {
-          bcrypt.hash(req.body.password, 10, (err, hash) => {
-            if (err) {
-              res.status(500).json({ from: "POST /add", error: err });
-            } else {
-              const user = new Admin({
-                _id: mongoose.Types.ObjectId(),
-                email: req.body.email,
-                password: hash,
-                role: role,
-              });
+    const adminSuperUserCb = (adminResult) => {
+      if (adminResult.isSuperUser) {
+        const getResultCb = (result) => {
+          if (result) {
+            res.status(409).json({ message: "Already Exsist" });
+          } else {
+            const admin = {
+              firstname: req.body.firstname,
+              lastname: req.body.lastname,
+              email: req.body.email,
+            };
 
-              user
-                .save()
-                .then((result) => {
-                  res.status(201).json({
-                    message: "Success",
-                  });
-                })
-                .catch((err) => {
-                  res.status(500).json({
-                    message: "Error While adding admin",
-                    error: err,
-                  });
-                });
-            }
-          });
-        } else {
-          res.status(401).json({ message: "You Are Not a Super User" });
-        }
+            admin["username"] =
+              typeof req.body.email === "string"
+                ? req.body.email.split("@")[0]
+                : null;
+
+            const addAdminCb = (result) => {
+              res.status(201).json({
+                isAdded: true,
+                message: "Success",
+              });
+            };
+
+            addOneAdmin(errorCb, addAdminCb, admin, req.body.password);
+          }
+        };
+
+        findOneAdmin(errorCb, getResultCb, { email: req.body.email });
+      } else {
+        res.status(401).json({ message: "You Are Not a Super User" });
       }
     };
 
-    findOneAdmin(errorCb, getResultCb, { _id: req.body.id });
+    findOneAdmin(errorCb, adminSuperUserCb, { _id: res.userData.id });
   } else {
-    const err = {
+    res.status(401).json({
       message: "Unauthorized",
-    };
-    res.status(401).json({ error: err });
+    });
   }
 };
 
@@ -249,7 +249,7 @@ exports.updateAdmin = (req, res, next) => {
       }
     };
 
-    //Check if requesting user is superuser or not
+    //Check if requesting admin is superuser or not
     findOneAdmin(errorCb, adminCb, { _id: res.userData.id });
   } else {
     res.status(401).json({
@@ -304,7 +304,7 @@ exports.deleteAdmin = (req, res, next) => {
       }
     };
 
-    //Check if requesting user is superuser or not
+    //Check if requesting admin is superuser or not
     findOneAdmin(errorCb, adminCb, { _id: res.userData.id });
   } else {
     res.status(401).json({
@@ -330,7 +330,7 @@ exports.getAdminById = (req, res, next) => {
       if (adminDetails) {
         const findCallBack = (result) => {
           if (result) {
-            const { password, ...resultWithoutPassword } = result;
+            const { password, ...resultWithoutPassword } = result._doc;
             res.status(200).json({
               ...resultWithoutPassword,
             });
@@ -359,7 +359,7 @@ exports.getAdminById = (req, res, next) => {
       }
     };
 
-    //Check if requesting user is superuser or not
+    //Check if requesting admin is superuser or not
     findOneAdmin(errorCb, adminCb, { _id: res.userData.id });
   } else {
     res.status(401).json({
@@ -377,9 +377,9 @@ exports.getAdmins = (req, res, next) => {
     /**
      * Parse Query string and convert it to object
      * This will be a mongoDB query
-     * so super user can give any query
+     * so super admin can give any query
      */
-    const query = queryString.parse(res.params.query);
+    const query = queryString.parse(req.params.query);
 
     const errorCb = (err) => {
       res.status(500).json({
@@ -414,7 +414,7 @@ exports.getAdmins = (req, res, next) => {
       }
     };
 
-    //Check if requesting user is superuser or not
+    //Check if requesting admin is superuser or not
     findOneAdmin(errorCb, adminCb, { _id: res.userData.id });
   } else {
     res.status(401).json({

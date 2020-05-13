@@ -32,6 +32,7 @@ const addOneUser = (errorCb, getResultsCb, userSchemaObject, password) => {
     } else {
       const user = new User({
         _id: mongoose.Types.ObjectId(),
+        password: hash,
         ...userSchemaObject,
       });
 
@@ -48,14 +49,30 @@ const addOneUser = (errorCb, getResultsCb, userSchemaObject, password) => {
 };
 
 const updateOneUser = (errorCb, getResultCb, query, updateProps) => {
-  User.updateOne(query, { $set: { ...updateProps } })
-    .exec()
-    .then((result) => {
-      getResultCb(result);
-    })
-    .catch((err) => {
-      errorCb(err);
+  const updateOneUserHelper = (props) => {
+    User.updateOne(query, { $set: { ...props } })
+      .exec()
+      .then((result) => {
+        getResultCb(result);
+      })
+      .catch((err) => {
+        errorCb(err);
+      });
+  };
+
+  const { password } = updateProps;
+  if (password) {
+    bcrypt.hash(password, 10, (err, hash) => {
+      if (err) {
+        errorCb(err);
+      } else {
+        updateProps.password = hash;
+        updateOneUserHelper(updateProps);
+      }
     });
+  } else {
+    updateOneUserHelper(updateProps);
+  }
 };
 
 const deleteOneUser = (errorCb, getResultCb, query) => {

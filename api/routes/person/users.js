@@ -18,6 +18,20 @@ router.post("/add", CheckAuth, userController.addUser);
 router.post("/login", userController.loginUser);
 
 /**
+ * Get user By Id
+ * every user can access his/her own record
+ * admin can access anyone's record
+ * librarian can access student and faculty record
+ */
+router.get("/:id", CheckAuth, userController.getUserById);
+
+/**
+ * Admin and Librarian can access
+ * get all user data by custom query
+ */
+router.get("/query/:query", CheckAuth, userController.getUsers);
+
+/**
  * user can update itself
  * Admin can update all users
  * Librarian can update faculty, student
@@ -30,16 +44,5 @@ router.patch("/:id", CheckAuth, userController.updateUser);
  * Librarian can delete faculty, student
  */
 router.delete("/:id", CheckAuth, userController.deleteUser);
-
-//Admins
-router.get("/users", CheckAuth, userController.getUsers);
-
-/**
- * Get user By Id
- * every user can access his/her own record
- * admin can access anyone's record
- * librarian can access student and faculty record
- */
-router.get("/:id", CheckAuth, userController.getUserById);
 
 module.exports = router;

@@ -1,4 +1,3 @@
-const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const queryString = require("query-string");
@@ -16,8 +15,6 @@ const {
  */
 const { contains } = require("../../helpers/algorithms");
 
-const { findOneAdmin, findAdminsByQuery } = require("../../helpers/admins");
-
 const {
   findOneUser,
   findUsersByQuery,
@@ -26,15 +23,15 @@ const {
   deleteOneUser,
 } = require("../../helpers/users");
 
-//ErrorCallBack
-const errorCb = (err) => {
-  res.status(500).json({ error: err });
-};
-
 /**
  * Login User
  */
 exports.loginUser = (req, res, next) => {
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
   const isValidUser = contains.call(
     [librarian.id, faculty.id, student.id],
     req.body.role
@@ -56,6 +53,9 @@ exports.loginUser = (req, res, next) => {
             if (decryptedRes) {
               const token = jwt.sign(
                 {
+                  firstname: result.firstname,
+                  lastname: result.lastname,
+                  username: result.username,
                   role: result.role,
                   email: result.email,
                   id: result._id,
@@ -97,7 +97,16 @@ exports.loginUser = (req, res, next) => {
  */
 
 exports.addUser = (req, res, next) => {
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
   const addUserHelper = (roles) => {
+    //console.log(contains.call(roles, req.body.role));
+    //console.log(contains.call(roles, req.body.role));
+    //console.log(roles);
+
     if (contains.call(roles, req.body.role)) {
       const getResultCb = (result) => {
         if (result) {
@@ -106,23 +115,29 @@ exports.addUser = (req, res, next) => {
           });
         } else {
           const user = {
+            firstname: req.body.firstname,
+            lastname: req.body.lastname,
             email: req.body.email,
-            password: hash,
             role: req.body.role,
           };
 
           if (req.body.role === student.id) {
-            user["cardNumber"] = req.body.cardNumber;
+            user["username"] = req.body.username;
+          } else {
+            user["username"] =
+              typeof req.body.email === "string"
+                ? req.body.email.split("@")[0]
+                : null;
           }
 
-          const userAddedCb = (result) => {
+          const addUserCb = (result) => {
             res.status(201).json({
               isAdded: true,
               message: "Success",
             });
           };
 
-          addOneUser(errorCb, userAddedCb, user, req.body.password);
+          addOneUser(errorCb, addUserCb, user, req.body.password);
         }
       };
 
@@ -149,10 +164,15 @@ exports.addUser = (req, res, next) => {
  * Get Userl By Id
  */
 exports.getUserById = (req, res, next) => {
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
   const getUserHelper = (roles) => {
     const getResultCb = (result) => {
       if (result) {
-        const { password, ...resultWithoutPassword } = result;
+        const { password, ...resultWithoutPassword } = result._doc;
         res.status(404).json({
           ...resultWithoutPassword,
         });
@@ -170,7 +190,7 @@ exports.getUserById = (req, res, next) => {
 
     findOneUser(errorCb, getResultCb, {
       $or: roleFilter,
-      email: req.body.email,
+      _id: req.params.id,
     });
   };
 
@@ -193,13 +213,21 @@ exports.getUserById = (req, res, next) => {
  * Get All Users
  */
 exports.getUsers = (req, res, next) => {
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
   if (res.userData.role === admin.id) {
     /**
      * Parse Query string and convert it to object
      * This will be a mongoDB query
      * so admin can give any query
      */
-    const query = queryString.parse(res.params.query);
+    const query = queryString.parse(req.params.query);
+    // console.log(req.params.query);
+    // console.log(query);
+
     const getResultCb = (results) => {
       res.status(200).json({
         count: results.length,
@@ -258,6 +286,11 @@ exports.getUsers = (req, res, next) => {
  * [{propName:"password", propValue:"12345678"},{propName:"firstname", propValue:"Rakesh"}]
  */
 exports.updateUser = (req, res, next) => {
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
   const updateProps = {};
   //req.body is expected to be an array
   for (const ops of req.body) {
@@ -294,10 +327,7 @@ exports.updateUser = (req, res, next) => {
     updateOneUser(
       errorCb,
       getResultCb,
-      {
-        $or: roleFilter,
-        _id: req.body.id,
-      },
+      { $or: roleFilter, _id: req.params.id },
       updateProps
     );
   };
@@ -305,15 +335,16 @@ exports.updateUser = (req, res, next) => {
   if (res.userData.role === admin.id) {
     updateUserHelper([librarian.id, faculty.id, student.id]);
   } else if (res.userData.role === librarian.id) {
-    if (res.userData.userId === req.params.userId) {
+    if (res.userData.id === req.params.id) {
       updateUserHelper([librarian.id]);
     } else {
       updateUserHelper([faculty.id, student.id]);
     }
-  } else if (contains.call([student.id, faculty.id], res.userData.role)) {
-    if (res.userData.userId === req.params.userId) {
-      updateUserHelper([faculty.id, student.id]);
-    }
+  } else if (
+    contains.call([student.id, faculty.id], res.userData.role) &&
+    res.userData.id === req.params.id
+  ) {
+    updateUserHelper([faculty.id, student.id]);
   } else {
     res.status(401).json({
       message: "Unauthorized",
@@ -327,6 +358,11 @@ exports.updateUser = (req, res, next) => {
  * any user can delete itself
  */
 exports.deleteUser = (req, res, next) => {
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
   const deleteUserHelper = (roles) => {
     const getResultCb = (result) => {
       if (result) {
@@ -349,22 +385,23 @@ exports.deleteUser = (req, res, next) => {
 
     deleteOneUser(errorCb, getResultCb, {
       $or: roleFilter,
-      _id: req.body.id,
+      _id: req.params.id,
     });
   };
 
   if (res.userData.role === admin.id) {
     deleteUserHelper([librarian.id, faculty.id, student.id]);
   } else if (res.userData.role === librarian.id) {
-    if (res.userData.userId === req.params.userId) {
+    if (res.userData.id === req.params.id) {
       deleteUserHelper([librarian.id]);
     } else {
       deleteUserHelper([faculty.id, student.id]);
     }
-  } else if (contains.call([student.id, faculty.id], res.userData.role)) {
-    if (res.userData.userId === req.params.userId) {
-      deleteUserHelper([faculty.id, student.id]);
-    }
+  } else if (
+    contains.call([student.id, faculty.id], res.userData.role) &&
+    res.userData.id === req.params.id
+  ) {
+    deleteUserHelper([faculty.id, student.id]);
   } else {
     res.status(401).json({
       message: "Unauthorized",

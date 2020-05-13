@@ -3,6 +3,22 @@ const mongoose = require("mongoose");
 const adminSchema = mongoose.Schema(
   {
     _id: mongoose.Schema.Types.ObjectId,
+    firstname: {
+      type: String,
+      required: true,
+      match: /^[a-z ]+$/i,
+    },
+    lastname: {
+      type: String,
+      required: true,
+      match: /^[a-z ]+$/i,
+    },
+    username: {
+      type: String,
+      required: true,
+      unique: true,
+      match: /^(?=.{5,20}$)(?![_.])(?!.*[_.]{2})[a-zA-Z0-9._]+(?<![_.])$/,
+    },
     email: {
       type: String,
       required: true,

@@ -1,3 +1,6 @@
+const bcrypt = require("bcrypt");
+const mongoose = require("mongoose");
+
 //Schema
 const Admin = require("../models/admins");
 
@@ -21,6 +24,30 @@ const findAdminsByQuery = (errorCb, getResultsCb, query) => {
     .catch((err) => {
       errorCb(err);
     });
+};
+
+const addOneAdmin = (errorCb, getResultsCb, adminSchemaObject, password) => {
+  console.log(adminSchemaObject);
+  bcrypt.hash(password, 10, (err, hash) => {
+    if (err) {
+      errorCb(err);
+    } else {
+      const admin = new Admin({
+        _id: mongoose.Types.ObjectId(),
+        password: hash,
+        ...adminSchemaObject,
+      });
+
+      admin
+        .save()
+        .then((result) => {
+          getResultsCb(result);
+        })
+        .catch((err) => {
+          errorCb(err);
+        });
+    }
+  });
 };
 
 const updateOneAdmin = (errorCb, getResultCb, query, updateProps) => {
@@ -48,6 +75,7 @@ const deleteOneAdmin = (errorCb, getResultCb, query) => {
 module.exports = {
   findOneAdmin,
   findAdminsByQuery,
+  addOneAdmin,
   updateOneAdmin,
   deleteOneAdmin,
 };

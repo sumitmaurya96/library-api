@@ -38,6 +38,9 @@ mongoose
                 } else {
                   const admin = new Admin({
                     _id: mongoose.Types.ObjectId(),
+                    firstname: "admin",
+                    lastname: "admin",
+                    username: "admin",
                     email: "admin@mail.com",
                     password: hash,
                   });

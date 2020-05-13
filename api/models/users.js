@@ -1,16 +1,28 @@
 const mongoose = require("mongoose");
 
 /**
- * If user is not student then cardNumber is email
+ * for student username is Card Number and for faculty or librarian splitted email string
+ * useremail@mail.com -> useremail
  */
 
 const userSchema = mongoose.Schema(
   {
     _id: mongoose.Schema.Types.ObjectId,
-    cardNumber: {
+    firstname: {
+      type: String,
+      required: true,
+      match: /^[a-z ]+$/i,
+    },
+    lastname: {
+      type: String,
+      required: true,
+      match: /^[a-z ]+$/i,
+    },
+    username: {
       type: String,
       required: true,
       unique: true,
+      match: /^(?=.{5,20}$)(?![_.])(?!.*[_.]{2})[a-zA-Z0-9._]+(?<![_.])$/,
     },
     email: {
       type: String,

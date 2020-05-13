@@ -1,5 +1,5 @@
 //find an element in array
-const contains = (needle) => {
+const contains = function (needle) {
   // Per spec, the way to identify NaN is that it is not equal to itself
   let findNaN = needle !== needle;
   let indexOf;
@@ -7,7 +7,7 @@ const contains = (needle) => {
   if (!findNaN && typeof Array.prototype.indexOf === "function") {
     indexOf = Array.prototype.indexOf;
   } else {
-    indexOf = (needle) => {
+    indexOf = function (needle) {
       let i = -1,
         index = -1;
 
