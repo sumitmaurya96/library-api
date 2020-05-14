@@ -1,63 +1,107 @@
+const queryString = require("query-string");
 //models
 const Book = require("../models/books");
+//Roles
+const { admin, librarian, faculty, student } = require("../roles-config/roles");
 
 /**
  * Unregistered users can not get ebook link
  */
-exports.get_all = (req, res, next) => {
-  Book.find()
-    .exec()
-    .then((results) => {
-      if (!results.length) {
-        res.status(404).json({
-          message: "Not found",
+exports.getBooks = (req, res, next) => {
+  const queryObj = queryString.parse("?" + req.params.query, {
+    parseNumbers: true,
+    parseBooleans: true,
+  });
+
+  let query = queryObj.query ? `${queryObj.query}` : "book";
+  query = queryObj.exact ? `\"${query}\"` : query;
+  query = queryObj.excludes ? `${query}-${excludes}` : query;
+
+  const pageSize =
+    queryObj.pageSize && queryObj.pageSize > 0 && queryObj.pageSize <= 30
+      ? queryObj.pageSize
+      : 30;
+
+  const pageNumber =
+    queryObj.pageNumber && queryObj.pageNumber > 0 ? queryObj.pageNumber : 1;
+
+  const limit =
+    queryObj.limit && queryObj.limit > 0 && queryObj.limit <= pageSize
+      ? queryObj.limit
+      : pageSize;
+
+  // console.log("pageSize: " + pageSize);
+  // console.log("pageNumber: " + pageNumber);
+  // console.log("Limit: " + limit);
+  // console.log("Query: " + query);
+
+  const findResultCb = (totalMachedItems) => {
+    Book.find({ $text: { $search: query } }, { $score: { $meta: "textScore" } })
+      .sort({ $score: { $meta: "textScore" } })
+      .skip((pageNumber - 1) * pageSize)
+      .limit(limit)
+      .exec()
+      .then((results) => {
+        if (!results.length) {
+          res.status(404).json({
+            message: "Not found",
+          });
+        } else {
+          res.status(200).json({
+            total: totalMachedItems,
+            count: results.length,
+            books: results.map((result) => {
+              const { ebookUrl, ...bookWithoutEbookLink } = result._doc;
+              const book = res.userData ? result._doc : bookWithoutEbookLink;
+              return {
+                book: book,
+                request: {
+                  type: "GET",
+                  url: `http://localhost:5000/books/${book._id}`,
+                },
+              };
+            }),
+          });
+        }
+      })
+      .catch((err) => {
+        res.status(500).json({
+          message: "from GET /books",
+          error: err,
         });
-      } else {
-        res.status(200).json({
-          count: results.length,
-          books: results.map((result) => {
-            console.log(result);
-            const { ebookUrl, ...bookWithoutEbookLink } = result._doc;
-            const book = res.userData ? result._doc : bookWithoutEbookLink;
-            return {
-              book: book,
-              request: {
-                type: "GET",
-                url: `http://localhost:5000/books/${book._id}`,
-              },
-            };
-          }),
-        });
-      }
-    })
-    .catch((err) => {
+      });
+  };
+
+  Book.find(
+    { $text: { $search: query } },
+    { $score: { $meta: "textScore" } }
+  ).countDocuments((err, count) => {
+    if (!err) {
+      findResultCb(count);
+    } else {
       res.status(500).json({
-        message: "from GET /books",
         error: err,
       });
-    });
+    }
+  });
 };
 
 /**
  * New book creation
  * Only Admin and Librarian can add new book
  */
-exports.post = (req, res, next) => {
+exports.addNewBook = (req, res, next) => {
+  const defaultThumbnailUrl =
+    "https://localhost:5000/uploads/1588577122171-the-arsonist.jpg";
   console.log(req.file);
-  if (
-    res.userData.roles &&
-    res.userData.roles.find((role) => {
-      return role === "admin" || role === "librarian";
-    })
-  ) {
+  if (res.userData.role === admin.id && res.userData.role === librarian.id) {
     const bookOps = {};
     for (const ops in req.body) {
-      if (ops === "thumbnailUrl") {
-        bookOps.thumbnailUrl = req.file.path;
-      } else {
-        bookOps[ops] = req.body[ops];
-      }
+      bookOps[ops] = req.body[ops];
     }
+
+    bookOps["thumbnailUrl"] =
+      req.file && req.file.path ? req.file.path : defaultThumbnailUrl;
 
     const book = new Book({
       _id: new mongoose.Types.ObjectId(),
@@ -79,7 +123,7 @@ exports.post = (req, res, next) => {
       });
   } else {
     res.status(401).json({
-      message: "Un-Authorized",
+      message: "Unauthorized",
     });
   }
 };
@@ -87,7 +131,7 @@ exports.post = (req, res, next) => {
 /**
  * only logged-in user can access Ebook Link
  */
-exports.get_by_id = (req, res, next) => {
+exports.getBookById = (req, res, next) => {
   const id = req.params.bookId;
   Book.findById(id)
     .exec()
@@ -98,7 +142,7 @@ exports.get_by_id = (req, res, next) => {
           message: "Not found",
         });
       } else {
-        const { ebookUrl, bookWithoutEbookLink } = result;
+        const { ebookUrl, ...bookWithoutEbookLink } = result;
         const book = res.userData ? result : bookWithoutEbookLink;
         res.status(200).json({
           ...book,
@@ -114,13 +158,10 @@ exports.get_by_id = (req, res, next) => {
 /**
  * Only Admin and Librarian can update book details
  */
-exports.patch = (req, res, next) => {
-  if (
-    res.userData.roles &&
-    res.userData.roles.find((role) => {
-      return role === "admin" || role === "librarian";
-    })
-  ) {
+exports.updateBook = (req, res, next) => {
+  const defaultThumbnailUrl =
+    "https://localhost:5000/uploads/1588577122171-the-arsonist.jpg";
+  if (res.userData.role === admin.id && res.userData.role === librarian.id) {
     //this method expect req.body to be an array
     const id = req.params.bookId;
     const updateOps = {};
@@ -128,6 +169,8 @@ exports.patch = (req, res, next) => {
     for (const ops of req.body) {
       if (ops.propName !== "_id") updateOps[ops.propName] = ops.propValue;
     }
+    bookOps["thumbnailUrl"] =
+      req.file && req.file.path ? req.file.path : defaultThumbnailUrl;
 
     Book.updateOne({ _id: id }, { $set: { ...updateOps } })
       .exec()
@@ -144,7 +187,7 @@ exports.patch = (req, res, next) => {
       });
   } else {
     res.status(401).json({
-      message: "Un-Authorized",
+      message: "Unauthorized",
     });
   }
 };
@@ -152,19 +195,14 @@ exports.patch = (req, res, next) => {
 /**
  * Only Admin and Librarian can update book details
  */
-exports.delete = (req, res, next) => {
-  if (
-    res.userData.roles &&
-    res.userData.roles.find((role) => {
-      return role === "admin" || role === "librarian";
-    })
-  ) {
+exports.deleteBook = (req, res, next) => {
+  if (res.userData.role === admin.id && res.userData.role === librarian.id) {
     const id = req.params.bookId;
     Book.deleteOne({ _id: id })
       .exec()
       .then((result) => {
         console.log(result);
-        //result.deletedCount is 0 no data matches with that id
+        //If result.deletedCount is 0, no data matches with that id
         if (result.deletedCount) {
           res.status(200).json(result);
         } else {
@@ -179,7 +217,7 @@ exports.delete = (req, res, next) => {
       });
   } else {
     res.status(401).json({
-      message: "Un-Authorized",
+      message: "Unauthorized",
     });
   }
 };

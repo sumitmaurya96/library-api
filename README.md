@@ -1,18 +1,23 @@
 # Library Api
 
-library-api is a express, Nodejs api
+library-api is a express, Nodejs api.
 
 ## Envoirnment Variables
 
 ```r
-DB_LINK=mongodb://<username>:<password>@cluster0-shard-00-00-hn6kk.mongodb.net:27017,cluster0-shard-00-01-hn6kk.mongodb.net:27017,cluster0-shard-00-02-hn6kk.mongodb.net:27017/test?ssl=true&replicaSet=Cluster0-shard-0&authSource=admin&retryWrites=true&w=majority
-
+DB_LINK=<MONGODB_LINK>
 TOKEN_ENCRYPTION_KEY=<YOUR ENCRYPTION KEY>
 SUPERUSER_KEY=<SUPERUSER KEY>
 DEFAULT_ADMIN_PASSWORD=<DEFAULT ADMIN KEY>
 ```
 
-## Book data format and properties
+## Api Requests
+
+#### Api has 5 routes "Books", "Users" , "Admins", "Notices", "Favourites", "Orders", Each routes serves corrosponding database query
+
+### Books
+
+#### Book data format
 
 ```json
 {
@@ -31,7 +36,33 @@ DEFAULT_ADMIN_PASSWORD=<DEFAULT ADMIN KEY>
   "publication": "Perason",
   "status": "Published",
   "shortDescription": "A Computer Science Book",
-  "longDescription": "This book contain lots of information about universal forces in nature",
+  "longDescription": "This book contain information about computer science",
   "price": 400.95
 }
+```
+
+#### Get Books by text query
+
+```js
+  https://localhost:5000/books/search/<Query Parameters>
+
+  #Query Parameters
+    #1 query=string    //Ex- query=Graph Theory
+    #2 exact=boolean    //If true, Return exact match to your search
+    #3 limit=number    //Maximum result to return
+    #4 excludes=string    //Match to be excluded, Ex- excludes=Theory
+    #5 limit=number    //Maximum result to return
+    #6 pageNumber=number    //page Number of result
+    #7 pageSize=number    //size of page
+```
+
+##### Examples
+
+```js
+    https://localhost:5000/books/search/query=Graph Theory&limit=10
+```
+
+##### gives most relevent result according to match
+
+```js
 ```

@@ -42,27 +42,32 @@ const upload = multer({
  * limits to 20 books per query for a perticular page
  * not authenticated users can't get ebooks link
  */
-router.get("/", authenticated, bookController.get_all);
+router.get("/search/:query", authenticated, bookController.getBooks);
 
 /**
  * Only Librarian and admin can access
  */
-router.post("/", checkAuth, upload.single("bookImage"), bookController.post);
+router.post(
+  "/",
+  checkAuth,
+  upload.single("bookImage"),
+  bookController.addNewBook
+);
 
 /**
  * Get books by Id
  * not authenticated users can't get ebooks link
  */
-router.get("/:bookId", authenticated, bookController.get_by_id);
+router.get("/:id", authenticated, bookController.getBookById);
 
 /**
  * Only Librarian and admin can access
  */
-router.patch("/:bookId", checkAuth, bookController.patch);
+router.patch("/:bookId", checkAuth, bookController.updateBook);
 
 /**
  * Only Librarian and admin can access
  */
-router.delete("/:bookId", checkAuth, bookController.delete);
+router.delete("/:bookId", checkAuth, bookController.deleteBook);
 
 module.exports = router;
