@@ -1,224 +1,249 @@
-const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const User = require("../models/users");
-const Admin = require("../models/admins");
-const { admin, librarian, faculty, student } = require("../roles-config/roles");
+const qs = require("qs");
 
-////////////////////////////////////////////////////////// POST //////////////////////////////////////////////////////////
-exports.loginUser = (req, res, next) => {
-  if (req.body.role) {
-    const Collection = req.body.role === "admin" ? Admin : User;
+//Roles
+const { admin, librarian, faculty, student } = require("../roles/roles");
 
-    Collection.find({ email: req.body.email })
-      .exec()
-      .then((user) => {
-        if (user.length < 1) {
-          return res.status(401).json({
-            message: "email or password incorrect 1",
-          });
-        }
+/**
+ * Helper functions
+ */
+const { contains } = require("../helpers/algorithms");
 
-        bcrypt.compare(req.body.password, user[0].password, (err, result) => {
-          if (err) {
-            return res.status(401).json({
-              message: "email or password incorrect 2",
-            });
-          }
+const {
+  findOneUser,
+  findUsersByQuery,
+  addOneUser,
+  updateOneUser,
+  deleteOneUser,
+} = require("../helpers/db-functions/users");
 
-          if (result) {
-            const key = process.env.TOKEN_ENCRYPTION_KEY;
-            const load = {
-              role: user[0].role,
-              email: user[0].email,
-              userId: user[0]._id,
-            };
+const {
+  addOneOrder,
+  deleteOneOrder,
+} = require("../helpers/db-functions/orders");
 
-            // if (req.body.role === "admin") {
-            //   load["isSuperUser"] = user[0].isSuperUser;
-            // }
+//valid roles
+const validRoles = [librarian, faculty, student, admin];
 
-            try {
-              const token = jwt.sign(load, key, {
-                expiresIn: "1h",
-              });
-
-              res.status(200).json({
-                message: "Auth Successful",
-                token: token,
-              });
-            } catch (err) {
-              res.status(401).json({
-                message: err,
-              });
-            }
-          } else {
-            res.status(401).json({
-              message: "email or password incorrect 3",
-            });
-          }
-        });
-      })
-      .catch((err) => {
-        res.status(500).json({
-          error: err,
-        });
-      });
-  } else {
-    //Role is not specified
-    res.status(409).json({
-      message: "role is not specified",
-    });
-  }
-};
+/**
+ * Add Users
+ */
 
 exports.addUserOrAdmin = (req, res, next) => {
-  //Helper Function to add users/admins
-  const add = (role) => {
-    //Set Collection
-    const Collection = role === "admin" ? Admin : User;
-
-    Collection.find({ email: req.body.email })
-      .exec()
-      .then((users) => {
-        console.log(users);
-        if (users.length >= 1) {
-          res.status(409).json({
-            message: "User Already Exsist",
-          });
-        } else {
-          bcrypt.hash(req.body.password, 10, (err, hash) => {
-            if (err) {
-              res.status(500).json({
-                from: "POST /add",
-                error: err,
-              });
-            } else {
-              const user =
-                role === "admin"
-                  ? new Admin({
-                      _id: mongoose.Types.ObjectId(),
-                      email: req.body.email,
-                      password: hash,
-                      role: role,
-                    })
-                  : role === "student"
-                  ? new User({
-                      _id: mongoose.Types.ObjectId(),
-                      cardNumber: req.body.cardNumber,
-                      email: req.body.email,
-                      password: hash,
-                      role: role,
-                    })
-                  : new User({
-                      _id: mongoose.Types.ObjectId(),
-                      cardNumber: req.body.email,
-                      email: req.body.email,
-                      password: hash,
-                      role: role,
-                    });
-
-              user
-                .save()
-                .then((result) => {
-                  res.status(201).json({
-                    message: "Success",
-                  });
-                })
-                .catch((err) => {
-                  res.status(500).json({
-                    message: "aaaakjkg",
-                    error: err,
-                  });
-                });
-            }
-          });
-        }
-      })
-      .catch((err) => {
-        res.status(500).json({
-          message: "fagkjkg",
-          error: err,
-        });
-      });
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
   };
 
-  //Only librarian and admin allowed
-  if (res.userData.role !== "admin" && res.userData.role !== "librarian") {
-    return res.status(401).json({
-      message: "Un-Authorized",
-    });
-  }
-
-  //Default student Role
-  const role = req.body.role ? req.body.role : "student";
-  //check if it is a valid role
-  if (
-    role !== admin.id &&
-    role !== librarian.id &&
-    role !== faculty.id &&
-    role !== student.id
-  ) {
-    return res.status(400).json({
-      message: "Not a valid role",
-    });
-  }
-
-  if (res.userData.role === "admin") {
-    if (res.userData.isSuperUser) {
-      //Super User
-      add(role);
-    } else {
-      //Normal Admin
-      if (req.body.role === "admin") {
-        //Cant add admin
-        res.status(401).json({
-          message: "An admin(not superuser) cant add another admin",
+  const addUserHelper = (roles) => {
+    const getResultCb = (result) => {
+      if (result) {
+        res.status(409).json({
+          message: "User Already Exsist",
         });
       } else {
-        add(role);
+        //Change after adding joi
+        const user = {
+          firstname: req.body.firstname,
+          lastname: req.body.lastname,
+          username: req.body.username,
+          email: req.body.email,
+          role: req.body.role,
+        };
+
+        const addUserCb = (result) => {
+          //Add user order bucket
+          const orderBucketDetails = {
+            username: req.body.username,
+          };
+
+          if (req.body.role === faculty) {
+            orderBucketDetails["borrowLimit"] = 50;
+            addOneOrder(req, res, orderBucketDetails);
+          } else if (req.body.role === student) {
+            addOneOrder(req, res, orderBucketDetails);
+          } else {
+            res.status(201).json({
+              message: "Success",
+            });
+          }
+        };
+
+        addOneUser(errorCb, addUserCb, user, req.body.password);
       }
-    }
-  } else if (res.userData.role === "librarian") {
-    if (req.body.role === "student" || req.body.role === "faculty") {
-      add(role);
+    };
+
+    findOneUser(errorCb, getResultCb, { username: req.body.username });
+  };
+
+  /**
+   * Who can add whoom
+   */
+  if (contains.call(validRoles, req.body.role)) {
+    if (res.userData.role === admin) {
+      if (req.body.role === admin) {
+        if (req.body.adminKey === process.env.SUPERUSER_KEY) {
+          addUserHelper();
+        } else {
+          res.status(401).json({
+            message: "Unauthorized",
+          });
+        }
+      } else {
+        addUserHelper();
+      }
+    } else if (res.userData.role === librarian) {
+      if (req.body.role === admin || req.body.role === librarian) {
+        res.status(401).json({
+          message: "Unauthorized",
+        });
+      } else {
+        addUserHelper();
+      }
     } else {
-      //Cant add Others
       res.status(401).json({
-        message: "Un-Authorized",
+        message: "Unauthorized",
       });
     }
   } else {
-    res.status(401).json({
-      message: "Un-Authorized",
+    res.status(400).json({
+      message: "Not a Valid Role",
     });
   }
 };
 
-///////////////////////////////////////////////////////////////////////GET////////////////////////////////////////////////////
 /**
- * Get All Users
- * Only Admin Can access this
+ * Login User
+ */
+exports.loginUser = (req, res, next) => {
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
+  const getResultCb = (result) => {
+    if (result) {
+      bcrypt.compare(
+        req.body.password,
+        result.password,
+        (err, decryptedRes) => {
+          if (err) {
+            return res.status(401).json({
+              message: "Email or Password Incorrect",
+            });
+          }
+
+          if (decryptedRes) {
+            const token = jwt.sign(
+              {
+                sub: result._id,
+              },
+              process.env.TOKEN_ENCRYPTION_KEY,
+              {
+                expiresIn: "1h",
+              }
+            );
+
+            res.status(200).json({
+              message: "Authentication Successful",
+              token: token,
+            });
+          } else {
+            res.status(401).json({
+              message: "Email or Password Incorrect",
+            });
+          }
+        }
+      );
+    } else {
+      res.status(401).json({
+        message: "Email or Password Incorrect",
+      });
+    }
+  };
+
+  const query = req.body.username
+    ? { username: req.body.username }
+    : { email: req.body.email };
+
+  findOneUser(errorCb, getResultCb, query);
+};
+
+/**
+ * Get User By Id
+ * Anyone can find its own data
+ */
+exports.getYourSelf = (req, res, next) => {
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
+  const getResultCb = (result) => {
+    if (result) {
+      const { password, ...resultWithoutPassword } = result._doc;
+      res.status(200).json({
+        ...resultWithoutPassword,
+      });
+    } else {
+      res.status(404).json({
+        message: "User Does Not Exsist",
+      });
+    }
+  };
+
+  findOneUser(errorCb, getResultCb, { _id: res.userData.id });
+};
+
+/**
+ * GET
+ * All users not admins
+ * only admin can access
  */
 exports.getAllUsers = (req, res, next) => {
-  //check if admin
-  if (res.userData.role === "admin") {
-    User.find()
-      .exec()
-      .then((results) => {
-        res.status(200).json({
-          count: results.length,
-          users: results.map((result) => {
-            const { password, ...resultWithoutPassword } = result._doc;
-            return resultWithoutPassword;
-          }),
-        });
-      })
-      .catch((err) => {
-        res.status(500).json({
-          error: err,
-        });
-      });
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
+  const getResultCb = (results) => {
+    res.status(200).json({
+      count: results.length,
+      users: results.map((user) => {
+        const { password, ...resultWithoutPassword } = user._doc;
+        return resultWithoutPassword;
+      }),
+    });
+  };
+
+  findUsersByQuery(errorCb, getResultCb, {
+    $or: [{ role: student }, { role: faculty }, { role: librarian }],
+  });
+};
+
+/**
+ * POST
+ * All admins
+ * only admin can access with key
+ */
+exports.getAllAdmins = (req, res, next) => {
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
+  const getResultCb = (results) => {
+    res.status(200).json({
+      count: results.length,
+      admins: results.map((admin) => {
+        const { password, ...resultWithoutPassword } = admin._doc;
+        return resultWithoutPassword;
+      }),
+    });
+  };
+
+  if (req.body.adminKey === process.env.SUPERUSER_KEY) {
+    findUsersByQuery(errorCb, getResultCb, {
+      $or: [{ role: admin }],
+    });
   } else {
     res.status(401).json({
       message: "Unauthorized",
@@ -227,98 +252,136 @@ exports.getAllUsers = (req, res, next) => {
 };
 
 /**
- * Get user/admin By Id
- * every user/admin can access his/her own record
- * superuser can access anyone's record
- * admin can access all users record but admin
- * librarian can access student and faculty record
+ * GET
+ * get user by username or id
+ * only admin can access with key
+ * username=<>
+ * id=<>
  */
-exports.getById = (req, res, next) => {
-  //Find User By Id in User Collection
-  const findOneUser = (cb) => {
-    User.findOne({ _id: req.params.userId })
-      .exec()
-      .then((result) => {
-        if (result) {
-          const { password, ...resultWithoutPassword } = result._doc;
-          //a librarian cant access another librarian data but can access faculty, student data
-          if (res.userData.role === "librarian") {
-            if (res.userData.userId === req.params.userId) {
-              cb(resultWithoutPassword);
-            } else {
-              res.status(401).json({
-                message: "Un-Authorized",
-              });
-            }
-          } else {
-            cb(resultWithoutPassword);
-          }
-        } else {
-          res.status(404).json({
-            message: "Not Found",
-          });
-        }
-      })
-      .catch((err) => {
-        res.status(500).json({
-          error: err,
-        });
-      });
+exports.getUserByUsernameOrId = (req, res, next) => {
+  const queryObj = qs.parse(req.params.query);
+
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
   };
 
-  //Find Admin/User function
-  const FindingStartFromAdmin = (isSuperUser, cb) => {
-    Admin.find({ _id: req.params.userId })
-      .exec()
-      .then((result) => {
-        if (result.length) {
-          const { password, ...adminWithoutPassword } = result[0];
-          if (isSuperUser) {
-            cb(adminWithoutPassword);
-          } else {
-            if (res.userData.userId === req.params.userId) {
-              //Own Id
-              cb(adminWithoutPassword);
-            } else {
-              res.status(401).json({
-                message: "Unauthorized",
-              });
-            }
-          }
-        } else {
-          findOneUser(cb);
-        }
-      })
-      .catch((err) => {
-        res.status(500).json({
-          error: err,
-        });
+  const getResultCb = (result) => {
+    if (result) {
+      const { password, ...resultWithoutPassword } = result._doc;
+      res.status(200).json({
+        ...resultWithoutPassword,
       });
-  };
-
-  if (res.userData.role === "admin") {
-    const cb = (result) => {
-      res.status(200).json(result);
-    };
-
-    if (res.userData.isSuperUser) {
-      FindingStartFromAdmin(true, cb);
     } else {
-      FindingStartFromAdmin(false, cb);
+      res.status(404).json({
+        message: "User Does Not Exsist",
+      });
     }
-  } else if (res.userData.role === "librarian") {
-    const cb = (result) => {
-      res.status(200).json(result);
-    };
-    findOneUser(cb);
-  } else {
-    //console.log(res.userData);
-    if (req.params.userId === res.userData.userId) {
-      const cb = (result) => {
-        res.status(200).json(result);
-      };
+  };
 
-      findOneUser(cb);
+  let query = queryObj.username
+    ? { username: queryObj.username }
+    : { _id: queryObj.id };
+
+  findOneUser(errorCb, getResultCb, {
+    $or: [{ role: student }, { role: faculty }, { role: librarian }],
+    ...query,
+  });
+};
+
+/**
+ * any user can update itself
+ * admin can update any user
+ */
+exports.updateUser = (req, res, next) => {
+  const query = qs.parse(req.params.query);
+  if (query.delLike) {
+    query.delLike = query.delLike === "true";
+  }
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
+  const validUpdateProps = ["firstname", "lastname", "password"];
+  const updateObj = {};
+
+  //req.body is expected to be an array
+  for (const ops in req.body) {
+    if (contains.call(validUpdateProps, ops)) {
+      updateObj[ops] = req.body[ops];
+    }
+  }
+
+  if (req.file) {
+    updateObj["profilePicUrl"] = req.file.path;
+  }
+
+  const updateQueryProps = { $set: updateObj };
+
+  if (req.body.favourites) {
+    const favourites = [];
+    for (const id of req.body.favourites) {
+      favourites.push({
+        abc: id,
+      });
+    }
+
+    updateQueryProps["$push"] = {
+      favourites: { $each: [...favourites] },
+    };
+  }
+
+  console.log(req.body.favourites);
+  console.log(updateQueryProps);
+
+  const updateUserHelper = (roles) => {
+    const getResultCb = (user) => {
+      if (user) {
+        const updateUserCb = (result) => {
+          if (result) {
+            if (result.nModified) {
+              res.status(200).json({
+                message: "Successful",
+              });
+            } else {
+              res.status(501).json({
+                message: "Not Updated",
+              });
+            }
+          }
+        };
+
+        updateOneUser(
+          errorCb,
+          updateUserCb,
+          { _id: req.params.id },
+          updateQueryProps
+        );
+      } else {
+        res.status(404).json({
+          message: "User Not Found",
+        });
+      }
+    };
+
+    const roleFilter = [];
+    for (const role of roles) {
+      roleFilter.push({ role: role });
+    }
+
+    findOneUser(errorCb, getResultCb, { $or: roleFilter, _id: req.params.id });
+  };
+
+  if (res.userData.id === req.params.id) {
+    updateUserHelper([librarian, faculty, student, admin]);
+  } else {
+    if (res.userData.role === admin) {
+      if (req.body.adminKey === process.env.SUPERUSER_KEY) {
+        updateUserHelper([librarian, faculty, student, admin]);
+      } else {
+        updateUserHelper([librarian, faculty, student]);
+      }
     } else {
       res.status(401).json({
         message: "Unauthorized",
@@ -328,287 +391,62 @@ exports.getById = (req, res, next) => {
 };
 
 /**
- * Get all admins data
- * only admin(superuser) can access
+ * any user can delete itself
+ * admin can delete any user
  */
-exports.getAllAdmins = (req, res, next) => {
-  //Only Admins
-  if (!res.userData.role === "admin" || !res.userData.isSuperUser) {
-    return res.status(401).json({
-      message: "Unauthorized",
-    });
-  }
-
-  Admin.find()
-    .exec()
-    .then((results) => {
-      //results can't be empty as we are creating a default admin if there is no admin present
-      res.status(200).json({
-        count: results.length,
-        admins: results.map((result) => {
-          const { password, ...resultWithoutPassword } = result._doc;
-          return resultWithoutPassword;
-        }),
-      });
-    })
-    .catch((err) => {
-      res.status(500).json({
-        error: err,
-      });
-    });
-};
-
-//////////////////////////////////////////////////////////////UPDATE///////////////////////////////////////////////////
-/**
- * superuser can update any user/admin even superuser
- * Student can update itself
- * Faculty can update itself
- * Librarian can update itself, student and faculty
- * Admin can update all except other admins
- *
- * request Body is an Array
- * [{propName:"password", propValue:"12345678"},{......},{......}]
- */
-exports.updateDetails = (req, res, next) => {
-  const updateOps = {};
-  //req.body is expected to be an array
-  for (const ops of req.body) {
-    updateOps[ops.propName] = ops.propValue;
-  }
-
-  const updateUser = () => {
-    User.updateOne({ _id: req.params.userId }, { $set: { ...updateOps } })
-      .exec()
-      .then((result) => {
-        console.log(result);
-        if (result.updatedCount) {
-          res.status(200).json({
-            message: "User Updated",
-          });
-        } else {
-          res.status(404).json({
-            message: "Not Found",
-          });
-        }
-      })
-      .catch((err) => {
-        res.status(500).json({
-          error: err,
-        });
-      });
+exports.deleteUser = (req, res, next) => {
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
   };
 
-  const updateStartFromAdmin = (isSuperUser = false) => {
-    const updateHelper = () => {
-      Admin.updateOne({ _id: req.params.userId }, { $set: { ...updateOps } })
-        .exec()
-        .then((result) => {
-          console.log(result);
-          if (result.updatedCount) {
-            res.status(200).json({
-              message: "Admin Updated",
-            });
+  const deleteUserHelper = (roles) => {
+    const getResultCb = (user) => {
+      const deleteUserCb = (result) => {
+        if (result) {
+          if (result.deletedCount) {
+            if (user.role === faculty || user.role === student) {
+              deleteOneOrder(req, res, { username: user.username });
+            } else {
+              res.status(200).json({
+                message: "Successful",
+              });
+            }
           } else {
-            updateUser();
+            res.status(400).json({
+              message: "Not Deleted",
+            });
           }
-        })
-        .catch((err) => {
-          res.status(500).json({
-            error: err,
+        } else {
+          res.status(404).json({
+            message: "User Not found",
           });
-        });
+        }
+      };
+
+      const roleFilter = [];
+      for (const role of roles) {
+        roleFilter.push({ role: role });
+      }
+
+      deleteOneUser(errorCb, deleteUserCb, {
+        $or: roleFilter,
+        _id: req.params.id,
+      });
     };
 
-    if (isSuperUser) {
-      updateHelper();
-    } else {
-      Admin.find({ _id: req.params.userId })
-        .exec()
-        .then((results) => {
-          if (results.length) {
-            updateUser();
-          } else {
-            if (req.params.userId !== res.userData.userId) {
-              res.status(401).json({
-                message: "Un-Authorized",
-              });
-            } else {
-              updateHelper();
-            }
-          }
-        })
-        .catch((err) => {
-          res.status(500).json({
-            error: err,
-          });
-        });
-    }
+    findOneUser(errorCb, getResultCb, { _id: req.params.id });
   };
 
-  //Role is not defined
-  if (!res.userData.role) {
-    return res.status(409).json({
-      message: "Role must be specified",
-    });
-  }
-
-  if (res.userData.role === "admin") {
-    //if superuser
-    if (res.userData.isSuperUser) {
-      updateStartFromAdmin(true);
-    } else {
-      updateStartFromAdmin();
-    }
-  } else if (res.userData.role === "librarian") {
-    User.find({ _id: req.params.userId })
-      .exec()
-      .then((results) => {
-        if (results.length) {
-          res.status(404).json({
-            message: "Not found",
-          });
-        } else {
-          if (results[0].role === "admin") {
-            res.status(401).json({
-              message: "Un-Authorized",
-            });
-          } else if (results[0].role === "librarian") {
-            if (res.userData.userId === req.params.userId) {
-              updateUser();
-            } else {
-              res.status(401).json({
-                message: "Un-Authorized",
-              });
-            }
-          } else {
-            updateUser();
-          }
-        }
-      })
-      .catch((err) => {
-        res.status(500).json({
-          error: err,
-        });
-      });
+  if (res.userData.id === req.params.id) {
+    deleteUserHelper([librarian, faculty, student, admin]);
   } else {
-    if (res.userData.userId === req.params.userId) {
-      updateUser();
-    }
-  }
-};
-
-///////////////////////////////////////////////////////////////////DELETE///////////////////////////////////////////////////////
-/**
- * superuser can delete any user/admin even superuser
- * Student can delete itself
- * Faculty can delete itself
- * Librarian can delete itself, student and faculty
- * Admin can delete all except other admins
- */
-exports.deleteById = (req, res, next) => {
-  const deleteUser = () => {
-    User.deleteOne({ _id: req.params.userId })
-      .exec()
-      .then((result) => {
-        console.log(result);
-        if (result.deletedCount) {
-          res.status(200).json({
-            message: "User Deleted",
-          });
-        } else {
-          res.status(404).json({
-            message: "Not found",
-          });
-        }
-      })
-      .catch((err) => {
-        res.status(500).json({
-          error: err,
-        });
-      });
-  };
-
-  const deleteStartFromAdmin = () => {
-    Admin.deleteOne({ _id: req.params.userId })
-      .exec()
-      .then((result) => {
-        console.log(result);
-        if (result.deletedCount) {
-          res.status(200).json({
-            message: "Admin Deleted",
-          });
-        } else {
-          deleteUser();
-        }
-      })
-      .catch((err) => {
-        res.status(500).json({
-          error: err,
-        });
-      });
-  };
-
-  //Role is not defined
-  if (!res.userData.role) {
-    return res.status(400).json({
-      message: "Role must be specified",
-    });
-  }
-
-  if (res.userData.role === "admin") {
-    //if superuser
-    if (res.userData.isSuperUser) {
-      deleteStartFromAdmin();
+    if (res.userData.role === admin) {
+      deleteUserHelper([librarian, faculty, student]);
     } else {
-      Admin.find({ _id: req.params.userId })
-        .exec()
-        .then((result) => {
-          if (result.length) {
-            if (req.params.userId === res.userData.userId) {
-              deleteStartFromAdmin();
-            } else {
-              res.status(401).json({ message: "Can't delete another admin" });
-            }
-          } else {
-            deleteUser();
-          }
-        })
-        .catch((err) => {
-          return res.status(500).json({
-            error: err,
-          });
-        });
-    }
-  } else if (res.userData.role === "librarian") {
-    User.findOne({ _id: req.params.userId })
-      .exec()
-      .then((result) => {
-        if (result) {
-          if (result.role === "librarian") {
-            if (req.params.userId === res.userData.userId) {
-              deleteUser();
-            } else {
-              res
-                .status(401)
-                .json({ message: "Can't delete another librarian" });
-            }
-          } else {
-            deleteUser();
-          }
-        } else {
-          res.status(404).json({
-            message: "No User found",
-          });
-        }
-      })
-      .catch((err) => {
-        return res.status(500).json({
-          error: err,
-        });
+      res.status(401).json({
+        message: "Unauthorized",
       });
-  } else {
-    if (res.userData.userId === req.params.userId) {
-      deleteUser();
     }
   }
 };

@@ -7,9 +7,11 @@ require("dotenv").config();
 
 //Routes
 const bookRoutes = require("./api/routes/books");
+const noticeRoutes = require("./api/routes/notices");
+const transactionRoutes = require("./api/routes/transactions");
+const userRoutes = require("./api/routes/users");
 const orderRoutes = require("./api/routes/orders");
-const userRoutes = require("./api/routes/person/users");
-const adminRoutes = require("./api/routes/person/admins");
+const feedbackRoutes = require("./api/routes/feedbacks");
 
 //Connect Database
 mongoose
@@ -21,56 +23,47 @@ mongoose
   .then(
     () => {
       //Create default Admin if no admin is present already
-      const Admin = require("./api/models/admins");
-      Admin.find()
-        .exec()
-        .then((admins) => {
-          if (!admins.length) {
-            require("bcrypt").hash(
-              process.env.DEFAULT_ADMIN_PASSWORD,
-              10,
-              (err, hash) => {
-                if (err) {
-                  console.log({
-                    from: "Error in Default Admin creation",
-                    error: err,
-                  });
-                } else {
-                  const admin = new Admin({
-                    _id: mongoose.Types.ObjectId(),
-                    firstname: "admin",
-                    lastname: "admin",
-                    username: "admin",
-                    email: "admin@mail.com",
-                    password: hash,
-                  });
-                  admin
-                    .save()
-                    .then()
-                    .catch((err) => {
-                      console.log({
-                        from: "Error in Default Admin creation",
-                        error: err,
-                      });
-                    });
-                }
-              }
-            );
-          }
-        })
-        .catch((err) => {
-          console.log({
-            from: "Error in Default Admin creation",
-            error: err,
-          });
-        });
+      const {
+        findUsersByQuery,
+        addOneUser,
+      } = require("./api/helpers/db-functions/users");
+
+      const errorCb = (err) => {
+        console.log(err);
+      };
+
+      const getResultCb = (results) => {
+        if (results.length) {
+          console.log("Admins present, Default admin creation stopped");
+        } else {
+          const admin = {
+            firstname: "admin",
+            lastname: "admin",
+            username: "admin",
+            email: "admin@mail.com",
+            role: "admin",
+          };
+
+          const adminAddedCb = (adminAddedResult) => {
+            console.log({
+              message: "Default Admin created",
+            });
+          };
+
+          addOneUser(
+            errorCb,
+            adminAddedCb,
+            admin,
+            process.env.DEFAULT_ADMIN_PASSWORD
+          );
+        }
+      };
+
+      findUsersByQuery(errorCb, getResultCb, null);
     },
     (err) => {
       /** handle initial connection error */
       console.log(err);
-      res.status(500).json({
-        message: "can't connect to database",
-      });
     }
   );
 
@@ -99,14 +92,17 @@ app.use((req, res, next) => {
 
 //Route middleware
 app.use("/books", bookRoutes);
+app.use("/notices", noticeRoutes);
+app.use("/transactions", transactionRoutes);
+app.use("/users", userRoutes);
 app.use("/orders", orderRoutes);
-app.use("/user", userRoutes);
-app.use("/admin", adminRoutes);
+app.use("/feedbacks", feedbackRoutes);
+//app.use("/admin", adminRoutes);
 
 //Error handling
 //If no routes matches
 app.use((req, res, next) => {
-  const error = new Error("Not Found");
+  const error = new Error("Route Not Found");
   error.status = 404;
   //forward
   next(error);

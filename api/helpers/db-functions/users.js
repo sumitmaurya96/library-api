@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 //Schema
-const User = require("../models/users");
+const User = require("../../models/users");
 
 const findOneUser = (errorCb, getResultCb, query) => {
   User.findOne(query)
@@ -50,7 +50,7 @@ const addOneUser = (errorCb, getResultsCb, userSchemaObject, password) => {
 
 const updateOneUser = (errorCb, getResultCb, query, updateProps) => {
   const updateOneUserHelper = (props) => {
-    User.updateOne(query, { $set: { ...props } })
+    User.updateOne(query, updateProps)
       .exec()
       .then((result) => {
         getResultCb(result);

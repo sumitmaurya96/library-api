@@ -39,6 +39,8 @@ DEFAULT_ADMIN_PASSWORD=<DEFAULT ADMIN KEY>
   "longDescription": "This book contain information about computer science",
   "price": 400.95
 }
+
+//Updoad Thumbnail and then thumbnailUrl property got added in this json data
 ```
 
 #### Get Books by text query

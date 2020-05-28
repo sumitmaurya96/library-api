@@ -1,8 +1,7 @@
 const mongoose = require("mongoose");
 
 /**
- * for student username is Card Number and for faculty or librarian splitted email string
- * useremail@mail.com -> useremail
+ * for student username is Card Number
  */
 
 const userSchema = mongoose.Schema(
@@ -38,6 +37,18 @@ const userSchema = mongoose.Schema(
       type: String,
       default: "student",
     },
+    profilePicUrl: {
+      type: String,
+      default: "/uploads/profile-pictures/default-profile-picture.png",
+    },
+    favourites: [
+      {
+        bookId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Book",
+        },
+      },
+    ],
   },
   { collection: "users" }
 );

@@ -7,10 +7,6 @@ const bookSchema = mongoose.Schema(
       type: String,
       unique: true,
     },
-    issn: {
-      type: String,
-      unique: true,
-    },
     authors: {
       type: Array,
       required: true,
@@ -45,9 +41,13 @@ const bookSchema = mongoose.Schema(
     pageCount: {
       type: Number,
     },
+    bookCount: {
+      type: Number,
+      required: true,
+    },
     thumbnailUrl: {
       type: String,
-      default: "http://localhost:5000/uploads/default-book-thumbnail.jpg",
+      default: "/uploads/book-thumbnails/default-book-thumbnail.png",
     },
     ebookUrl: {
       type: String,
@@ -71,13 +71,5 @@ const bookSchema = mongoose.Schema(
   },
   { collection: "books" }
 );
-
-bookSchema.path("isbn").required(() => {
-  return !this.issn;
-}, "one of isbn, issn is required");
-
-bookSchema.path("issn").required(() => {
-  return !this.isbn;
-}, "one of isbn, issn is required");
 
 module.exports = mongoose.model("Book", bookSchema);

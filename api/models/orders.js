@@ -1,17 +1,46 @@
 const mongoose = require("mongoose");
 
+/**
+ * transaction_code ("borrowed" or "returned")
+ */
+
 const orderSchema = mongoose.Schema(
   {
     _id: mongoose.Schema.Types.ObjectId,
-    book: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Book",
+    username: {
+      type: String,
       required: true,
+      unique: true,
     },
-    quantity: {
+    borrowLimit: {
       type: Number,
-      default: 1,
+      default: 6,
     },
+    dueAmount: {
+      type: Number,
+      default: 0,
+    },
+    orders: [
+      {
+        granted: {
+          type: Boolean,
+          default: false,
+        },
+        borrowDate: {
+          type: Date,
+          default: new Date().toISOString(),
+        },
+        submissionDate: {
+          type: Date,
+          default: new Date().toISOString(),
+        },
+        bookId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Book",
+          required: true,
+        },
+      },
+    ],
   },
   { collection: "orders" }
 );
