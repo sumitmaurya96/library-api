@@ -326,7 +326,7 @@ exports.getAllOrders = (req, res, next) => {
 
   const getResultCb = (results) => {
     res.status(200).json({
-      count: results.length,
+      total: results.length,
       orders: results,
     });
   };

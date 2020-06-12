@@ -207,7 +207,7 @@ exports.getAllUsers = (req, res, next) => {
 
   const getResultCb = (results) => {
     res.status(200).json({
-      count: results.length,
+      total: results.length,
       users: results.map((user) => {
         const { password, ...resultWithoutPassword } = user._doc;
         return resultWithoutPassword;
@@ -387,6 +387,86 @@ exports.updateUser = (req, res, next) => {
         message: "Unauthorized",
       });
     }
+  }
+};
+
+/**
+ * any user can update its favourite
+ * delete=true to delete
+ * body contain bookId
+ */
+exports.updateFavourites = (req, res, next) => {
+  const query = qs.parse(req.params.query);
+
+  query["delete"] = query.delete === "true";
+
+  //ErrorCallBack
+  const errorCb = (err) => {
+    res.status(500).json({ error: err });
+  };
+
+  const updateQueryProps = {};
+
+  if (query.delete) {
+    updateQueryProps["$pull"] = { favourites: { bookId: req.body.bookId } };
+  } else {
+    updateQueryProps["$push"] = { favourites: { bookId: req.body.bookId } };
+  }
+
+  const updateUserFavourite = () => {
+    const getResultCb = (user) => {
+      if (user) {
+        const updateUserCb = (result) => {
+          if (result) {
+            if (result.nModified) {
+              res.status(200).json({
+                message: "Successful",
+              });
+            } else {
+              res.status(501).json({
+                message: "Not Updated",
+              });
+            }
+          }
+        };
+
+        let alreadyAdded = false;
+
+        for (fav of user.favourites) {
+          if (fav.bookId.equals(req.body.bookId)) {
+            alreadyAdded = true;
+            break;
+          }
+        }
+
+        if (alreadyAdded && !query.delete) {
+          res.status(403).json({ message: "Already added" });
+        } else {
+          console.log(req.body.bookId);
+          console.log(updateQueryProps);
+          updateOneUser(
+            errorCb,
+            updateUserCb,
+            { _id: res.userData._id },
+            updateQueryProps
+          );
+        }
+      } else {
+        res.status(404).json({
+          message: "User Not Found",
+        });
+      }
+    };
+
+    findOneUser(errorCb, getResultCb, {
+      _id: res.userData.id,
+    });
+  };
+
+  if (res.userData.role === admin || res.userData.role === librarian) {
+    res.status(403).json({ message: "You can't have favourites" });
+  } else {
+    updateUserFavourite();
   }
 };
 

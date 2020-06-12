@@ -102,6 +102,17 @@ router.patch(
 );
 
 /**
+ * users can update its favourites
+ * delete=true to delete
+ * body contains bookId
+ */
+router.patch(
+  "/favourites/:query",
+  CheckAuth([admin, student, faculty]),
+  userController.updateFavourites
+);
+
+/**
  * users can delete itself
  * Admin can delete all users
  */

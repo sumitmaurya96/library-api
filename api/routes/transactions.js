@@ -13,7 +13,7 @@ const { admin, librarian } = require("../roles/roles");
  ** toDate=<date>
  */
 router.get(
-  "/date/:query",
+  "/query/:query",
   checkAuth([admin]),
   transactionController.getTransactionsByDate
 );
@@ -25,7 +25,7 @@ router.get(
  ** userId=<user Id>
  */
 router.get(
-  "/:query",
+  "/id/:query",
   checkAuth([admin, librarian]),
   transactionController.getTransactionById
 );

@@ -50,27 +50,44 @@ const addOneUser = (errorCb, getResultsCb, userSchemaObject, password) => {
 
 const updateOneUser = (errorCb, getResultCb, query, updateProps) => {
   const updateOneUserHelper = (props) => {
-    User.updateOne(query, updateProps)
+    User.updateOne(query, props)
       .exec()
       .then((result) => {
         getResultCb(result);
       })
       .catch((err) => {
+        console.log(err);
         errorCb(err);
       });
   };
 
-  const { password } = updateProps;
-  if (password) {
+  const reqType = { password: false };
+  if (updateProps["$set"]) {
+    reqType.password = updateProps["$set"].password;
+  }
+
+  console.log(reqType.password);
+
+  if (reqType.password) {
     bcrypt.hash(password, 10, (err, hash) => {
       if (err) {
         errorCb(err);
       } else {
-        updateProps.password = hash;
+        updateProps.$set.password = hash;
         updateOneUserHelper(updateProps);
       }
     });
   } else {
+    // if (updateProps["$pull"]) {
+    //   updateProps["$pull"].favourites = mongoose.Types.ObjectId(
+    //     updateProps["$pull"].favourites
+    //   );
+    // } else if (updateProps["$push"]) {
+    //   updateProps["$push"].favourites = mongoose.Types.ObjectId(
+    //     updateProps["$push"].favourites
+    //   );
+    // }
+
     updateOneUserHelper(updateProps);
   }
 };

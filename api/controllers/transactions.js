@@ -22,7 +22,7 @@ exports.getTransactionsByDate = (req, res, next) => {
     .exec()
     .then((result) => {
       res.status(200).json({
-        count: result.length,
+        total: result.length,
         transactions: result,
       });
     })
